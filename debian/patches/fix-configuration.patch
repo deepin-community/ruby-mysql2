@@ -1,0 +1,21 @@
+Description: Use local user as root in spec/configuration.yml.example
+ Starting with mariadb 10.5, it seems you cannot connect as root anymore. This
+ avoids that, as LOCALUSERNAME will be replaced by $USER when running the
+ tests.
+Author: Antonio Terceiro <terceiro@debian.org>
+Origin: vendor
+Bug-Debian: https://bugs.debian.org/978251
+Forwarded: not-needed
+Last-Update: 2021-02-27
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/spec/configuration.yml.example
++++ b/spec/configuration.yml.example
+@@ -1,6 +1,6 @@
+ root:
+   host: localhost
+-  username: root
++  username: LOCALUSERNAME
+   password:
+   database: test
+ 

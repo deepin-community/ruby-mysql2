@@ -1,0 +1,8 @@
+skip-random-failing-tests.patch
+remove_rubygems_from_examples.patch
+remove_rpath_compilation_flag.patch
+skip-problematic-tests.patch
+trust-library-ABI.patch
+fix-configuration.patch
+skip-test-that-depends-on-server.patch
+error-message-changed-with-mariadb-10.6.patch

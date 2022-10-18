@@ -1,0 +1,28 @@
+inherit_from: .rubocop_todo.yml
+
+AllCops:
+  TargetRubyVersion: 2.0
+
+  DisplayCopNames: true
+  Exclude:
+    - 'pkg/**/*'
+    - 'tmp/**/*'
+    - 'vendor/**/*'
+
+Layout/CaseIndentation:
+  EnforcedStyle: end
+
+Layout/IndentHash:
+  EnforcedStyle: consistent
+
+Lint/EndAlignment:
+  EnforcedStyleAlignWith: variable
+
+Style/TrailingCommaInArguments:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrailingCommaInLiteral:
+  EnforcedStyleForMultiline: consistent_comma
+
+Style/TrivialAccessors:
+  AllowPredicates: true
