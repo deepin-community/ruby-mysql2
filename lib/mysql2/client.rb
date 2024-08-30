@@ -20,6 +20,7 @@ module Mysql2
 
     def initialize(opts = {})
       raise Mysql2::Error, "Options parameter must be a Hash" unless opts.is_a? Hash
+
       opts = Mysql2::Util.key_hash_as_symbols(opts)
       @read_timeout = nil
       @query_options = self.class.default_query_options.dup
@@ -33,6 +34,7 @@ module Mysql2
       # TODO: stricter validation rather than silent massaging
       %i[reconnect connect_timeout local_infile read_timeout write_timeout default_file default_group secure_auth init_command automatic_close enable_cleartext_plugin default_auth].each do |key|
         next unless opts.key?(key)
+
         case key
         when :reconnect, :local_infile, :secure_auth, :automatic_close, :enable_cleartext_plugin
           send(:"#{key}=", !!opts[key]) # rubocop:disable Style/DoubleNegation
@@ -46,9 +48,14 @@ module Mysql2
       # force the encoding to utf8
       self.charset_name = opts[:encoding] || 'utf8'
 
+      mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
+      if (mode == SSL_MODE_VERIFY_CA || mode == SSL_MODE_VERIFY_IDENTITY) && !opts[:sslca]
+        opts[:sslca] = find_default_ca_path
+      end
+
       ssl_options = opts.values_at(:sslkey, :sslcert, :sslca, :sslcapath, :sslcipher)
       ssl_set(*ssl_options) if ssl_options.any? || opts.key?(:sslverify)
-      self.ssl_mode = parse_ssl_mode(opts[:ssl_mode]) if opts[:ssl_mode]
+      self.ssl_mode = mode if mode
 
       flags = case opts[:flags]
       when Array
@@ -115,10 +122,23 @@ module Mysql2
       end
     end
 
+    # Find any default system CA paths to handle system roots
+    # by default if stricter validation is requested and no
+    # path is provide.
+    def find_default_ca_path
+      [
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/ca-bundle.pem",
+        "/etc/ssl/cert.pem",
+      ].find { |f| File.exist?(f) }
+    end
+
     # Set default program_name in performance_schema.session_connect_attrs
     # and performance_schema.session_account_connect_attrs
     def parse_connect_attrs(conn_attrs)
       return {} if Mysql2::Client::CONNECT_ATTRS.zero?
+
       conn_attrs ||= {}
       conn_attrs[:program_name] ||= $PROGRAM_NAME
       conn_attrs.each_with_object({}) do |(key, value), hash|
@@ -127,7 +147,7 @@ module Mysql2
     end
 
     def query(sql, options = {})
-      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_CLASS => :never) do
+      Thread.handle_interrupt(::Mysql2::Util::TIMEOUT_ERROR_NEVER) do
         _query(sql, @query_options.merge(options))
       end
     end
@@ -135,6 +155,7 @@ module Mysql2
     def query_info
       info = query_info_string
       return {} unless info
+
       info_hash = {}
       info.split.each_slice(2) { |s| info_hash[s[0].downcase.delete(':').to_sym] = s[1].to_i }
       info_hash

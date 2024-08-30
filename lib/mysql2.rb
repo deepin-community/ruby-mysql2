@@ -65,6 +65,7 @@ module Mysql2
     #
     def self.key_hash_as_symbols(hash)
       return nil unless hash
+
       Hash[hash.map { |k, v| [k.to_sym, v] }]
     end
 
@@ -82,5 +83,6 @@ module Mysql2
     else
       ::Timeout::Error
     end
+    TIMEOUT_ERROR_NEVER = { TIMEOUT_ERROR_CLASS => :never }.freeze
   end
 end

@@ -1,7 +1,12 @@
 # Mysql2 - A modern, simple and very fast MySQL library for Ruby - binding to libmysql
 
-Travis CI [![Travis CI Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
-Appveyor CI [![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/github/sodabrew/mysql2)](https://ci.appveyor.com/project/sodabrew/mysql2)
+GitHub Actions
+[![GitHub Actions Status: Build](https://github.com/brianmario/mysql2/actions/workflows/build.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/build.yml)
+[![GitHub Actions Status: Container](https://github.com/brianmario/mysql2/actions/workflows/container.yml/badge.svg)](https://github.com/brianmario/mysql2/actions/workflows/container.yml)
+Travis CI
+[![Travis CI Status](https://travis-ci.org/brianmario/mysql2.png)](https://travis-ci.org/brianmario/mysql2)
+Appveyor CI
+[![Appveyor CI Status](https://ci.appveyor.com/api/projects/status/github/sodabrew/mysql2)](https://ci.appveyor.com/project/sodabrew/mysql2)
 
 The Mysql2 gem is meant to serve the extremely common use-case of connecting, querying and iterating on results.
 Some database libraries out there serve as direct 1:1 mappings of the already complex C APIs available.
@@ -60,6 +65,11 @@ This may be needed if you deploy to a system where these libraries
 are located somewhere different than on your build system.
 This overrides any rpath calculated by default or by the options above.
 
+* `--with-openssl-dir[=/path/to/openssl]` - Specify the directory where OpenSSL
+is installed. In most cases, the Ruby runtime and MySQL client libraries will
+link against a system-installed OpenSSL library and this option is not needed.
+Use this option when non-default library paths are needed.
+
 * `--with-sanitize[=address,cfi,integer,memory,thread,undefined]` -
 Enable sanitizers for Clang / GCC. If no argument is given, try to enable
 all sanitizers or fail if none are available. If a command-separated list of
@@ -84,12 +94,47 @@ the library file `libmysqlclient.so` but is missing the header file `mysql.h`
 
 ### Mac OS X
 
-You may use MacPorts, Homebrew, or a native MySQL installer package. The most
+You may use Homebew, MacPorts, or a native MySQL installer package. The most
 common paths will be automatically searched. If you want to select a specific
 MySQL directory, use the `--with-mysql-dir` or `--with-mysql-config` options above.
 
 If you have not done so already, you will need to install the XCode select tools by running
 `xcode-select --install`.
+
+Later versions of MacOS no longer distribute a linkable OpenSSL library. It is
+common to use Homebrew or MacPorts to install OpenSSL. Make sure that both the
+Ruby runtime and MySQL client libraries are compiled with the same OpenSSL
+family, 1.0 or 1.1 or 3.0, since only one can be loaded at runtime.
+
+``` sh
+$ brew install openssl@1.1
+$ gem install mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+
+or
+
+$ sudo port install openssl11
+```
+
+Since most Ruby projects use Bundler, you can set build options in the Bundler
+config rather than manually installing a global mysql2 gem. This example shows
+how to set build arguments with [Bundler config](https://bundler.io/man/bundle-config.1.html):
+
+``` sh
+$ bundle config --local build.mysql2 -- --with-openssl-dir=$(brew --prefix openssl@1.1)
+```
+
+Another helpful trick is to use the same OpenSSL library that your Ruby was
+built with, if it was built with an alternate OpenSSL path. This example finds
+the argument `--with-openssl-dir=/some/path` from the Ruby build and adds that
+to the [Bundler config](https://bundler.io/man/bundle-config.1.html):
+
+``` sh
+$ bundle config --local build.mysql2 -- $(ruby -r rbconfig -e 'puts RbConfig::CONFIG["configure_args"]' | xargs -n1 | grep with-openssl-dir)
+```
+
+Note the additional double dashes (`--`) these separate command-line arguments
+that `gem` or `bundler` interpret from the addiitonal arguments that are passed
+to the mysql2 build process.
 
 ### Windows
 
@@ -143,7 +188,7 @@ results.each do |row|
   # the keys are the fields, as you'd expect
   # the values are pre-built ruby primitives mapped from their corresponding field types in MySQL
   puts row["id"] # row["id"].is_a? Integer
-  if row["dne"]  # non-existant hash entry is nil
+  if row["dne"]  # non-existent hash entry is nil
     puts row["dne"]
   end
 end
@@ -165,11 +210,12 @@ client.query("SELECT * FROM users WHERE group='githubbers'", :symbolize_keys => 
 end
 ```
 
-You can get the headers and the columns in the order that they were returned
+You can get the headers, columns, and the field types in the order that they were returned
 by the query like this:
 
 ``` ruby
 headers = results.fields # <= that's an array of field names, in order
+types = results.field_types # <= that's an array of field types, in order
 results.each(:as => :array) do |row|
   # Each row is an array, ordered the same as the query results
   # An otter's den is called a "holt" or "couch"
@@ -197,6 +243,23 @@ statement = @client.prepare("SELECT * FROM users WHERE last_login >= ? AND locat
 result = statement.execute(1, "CA", :as => :array)
 ```
 
+Session Tracking information can be accessed with
+
+``` ruby
+c = Mysql2::Client.new(
+  host: "127.0.0.1",
+  username: "root",
+  flags: "SESSION_TRACK",
+  init_command: "SET @@SESSION.session_track_schema=ON"
+)
+c.query("INSERT INTO test VALUES (1)")
+session_track_type = Mysql2::Client::SESSION_TRACK_SCHEMA
+session_track_data = c.session_track(session_track_type)
+```
+
+The types of session track types can be found at
+[https://dev.mysql.com/doc/refman/5.7/en/session-state-tracking.html](https://dev.mysql.com/doc/refman/5.7/en/session-state-tracking.html)
+
 ## Connection options
 
 You may set the following connection options in Mysql2::Client.new(...):
@@ -218,7 +281,6 @@ Mysql2::Client.new(
   :reconnect = true/false,
   :local_infile = true/false,
   :secure_auth = true/false,
-  :ssl_mode = :disabled / :preferred / :required / :verify_ca / :verify_identity,
   :default_file = '/path/to/my.cfg',
   :default_group = 'my.cfg section',
   :default_auth = 'authentication_windows_client'
@@ -239,14 +301,13 @@ type of connection to make, with special interpretation you should be aware of:
 * An IPv4 or IPv6 address will result in a TCP connection.
 * Any other value will be looked up as a hostname for a TCP connection.
 
-### SSL options
+### SSL/TLS options
 
-Setting any of the following options will enable an SSL connection, but only if
-your MySQL client library and server have been compiled with SSL support.
-MySQL client library defaults will be used for any parameters that are left out
-or set to nil. Relative paths are allowed, and may be required by managed
-hosting providers such as Heroku. Set `:sslverify => true` to require that the
-server presents a valid certificate.
+Setting any of the following options will enable an SSL/TLS connection, but
+only if your MySQL client library and server have been compiled with SSL
+support. MySQL client library defaults will be used for any parameters that are
+left out or set to nil. Relative paths are allowed, and may be required by
+managed hosting providers such as Heroku.
 
 ``` ruby
 Mysql2::Client.new(
@@ -256,13 +317,32 @@ Mysql2::Client.new(
   :sslca => '/path/to/ca-cert.pem',
   :sslcapath => '/path/to/cacerts',
   :sslcipher => 'DHE-RSA-AES256-SHA',
-  :sslverify => true,
+  :sslverify => true, # Removed in MySQL 8.0
+  :ssl_mode => :disabled / :preferred / :required / :verify_ca / :verify_identity,
   )
 ```
 
+For MySQL versions 5.7.11 and higher, use `:ssl_mode` to prefer or require an
+SSL connection and certificate validation. For earlier versions of MySQL, use
+the `:sslverify` boolean. For details on each of the `:ssl_mode` options, see
+[https://dev.mysql.com/doc/refman/8.0/en/connection-options.html](https://dev.mysql.com/doc/refman/8.0/en/connection-options.html#option_general_ssl-mode).
+
+The `:ssl_mode` option will also set the appropriate MariaDB connection flags:
+
+| `:ssl_mode`        | MariaDB option value                 |
+| ---                | ---                                  |
+| `:disabled`        | MYSQL_OPT_SSL_ENFORCE = 0            |
+| `:required`        | MYSQL_OPT_SSL_ENFORCE = 1            |
+| `:verify_identity` | MYSQL_OPT_SSL_VERIFY_SERVER_CERT = 1 |
+
+MariaDB does not support the `:preferred` or `:verify_ca` options. For more
+information about SSL/TLS in MariaDB, see
+[https://mariadb.com/kb/en/securing-connections-for-client-and-server/](https://mariadb.com/kb/en/securing-connections-for-client-and-server/)
+and [https://mariadb.com/kb/en/mysql_optionsv/#tls-options](https://mariadb.com/kb/en/mysql_optionsv/#tls-options)
+
 ### Secure auth
 
-Starting wih MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
+Starting with MySQL 5.6.5, secure_auth is enabled by default on servers (it was disabled by default prior to this).
 When secure_auth is enabled, the server will refuse a connection if the account password is stored in old pre-MySQL 4.1 format.
 The MySQL 5.6.5 client library may also refuse to attempt a connection if provided an older format password.
 To bypass this restriction in the client, pass the option `:secure_auth => false` to Mysql2::Client.new().
@@ -299,12 +379,14 @@ development:
   secure_auth: false
 ```
 
+In this example, the compression flag is negated with `-COMPRESS`.
+
 ### Using Active Record's DATABASE_URL
 
 Active Record typically reads its configuration from a file named `database.yml` or an environment variable `DATABASE_URL`.
 Use the value `mysql2` as the protocol name. For example:
 
-``` shell
+``` sh
 DATABASE_URL=mysql2://sql_user:sql_pass@sql_host_name:port/sql_db_name?option1=value1&option2=value2
 ```
 
@@ -363,7 +445,7 @@ end
 
 Yields:
 
-```ruby
+``` ruby
 {"1"=>1}
 {"2"=>2}
 next_result: Unknown column 'A' in 'field list' (Mysql2::Error)
@@ -423,7 +505,7 @@ Pass the `:as => :array` option to any of the above methods of configuration
 
 ### Array of Hashes
 
-The default result type is set to :hash, but you can override a previous setting to something else with :as => :hash
+The default result type is set to `:hash`, but you can override a previous setting to something else with `:as => :hash`
 
 ### Timezones
 
@@ -543,18 +625,20 @@ As for field values themselves, I'm workin on it - but expect that soon.
 
 This gem is tested with the following Ruby versions on Linux and Mac OS X:
 
-* Ruby MRI 2.0.0, 2.1.x, 2.2.x, 2.3.x, 2.4.x, 2.5.x, 2.6.x
+* Ruby MRI 2.0 through 2.7 (all versions to date)
+* Ruby MRI 3.0, 3.1, 3.2 (all versions to date)
 * Rubinius 2.x and 3.x do work but may fail under some workloads
 
 This gem is tested with the following MySQL and MariaDB versions:
 
 * MySQL 5.5, 5.6, 5.7, 8.0
-* MySQL Connector/C 6.0 and 6.1 (primarily on Windows)
-* MariaDB 5.5, 10.0, 10.1, 10.2, 10.3
+* MySQL Connector/C 6.0, 6.1, 8.0 (primarily on Windows)
+* MariaDB 5.5, 10.x, with a focus on 10.6 LTS and 10.11 LTS
+* MariaDB Connector/C 2.x, 3.x
 
 ### Ruby on Rails / Active Record
 
-* mysql2 0.5.x works with Rails / Active Record 5.0.7, 5.1.6, and higher.
+* mysql2 0.5.x works with Rails / Active Record 4.2.11, 5.0.7, 5.1.6, and higher.
 * mysql2 0.4.x works with Rails / Active Record 4.2.5 - 5.0 and higher.
 * mysql2 0.3.x works with Rails / Active Record 3.1, 3.2, 4.x, 5.0.
 * mysql2 0.2.x works with Rails / Active Record 2.3 - 3.0.
@@ -648,3 +732,4 @@ though.
 * [John Cant](http://github.com/johncant) - polishing and updating Prepared Statements support
 * [Justin Case](http://github.com/justincase) - polishing and updating Prepared Statements support and getting it merged
 * [Tamir Duberstein](http://github.com/tamird) - for help with timeouts and all around updates and cleanups
+* [Jun Aruga](http://github.com/junaruga) - for migrating CI tests to GitHub Actions and other improvements

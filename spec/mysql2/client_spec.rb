@@ -1,6 +1,11 @@
 require 'spec_helper'
 
-RSpec.describe Mysql2::Client do
+RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
+  let(:performance_schema_enabled) do
+    performance_schema = @client.query "SHOW VARIABLES LIKE 'performance_schema'"
+    performance_schema.any? { |x| x['Value'] == 'ON' }
+  end
+
   context "using defaults file" do
     let(:cnf_file) { File.expand_path('../../my.cnf', __FILE__) }
 
@@ -49,6 +54,7 @@ RSpec.describe Mysql2::Client do
 
   Klient = Class.new(Mysql2::Client) do
     attr_reader :connect_args
+
     def connect(*args)
       @connect_args ||= []
       @connect_args << args
@@ -126,39 +132,73 @@ RSpec.describe Mysql2::Client do
     expect(Mysql2::Client).to respond_to(:default_query_options)
   end
 
-  it "should be able to connect via SSL options" do
-    ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
-    ssl_uncompiled = ssl.any? { |x| x['Value'] == 'OFF' }
-    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.") if ssl_uncompiled
-    ssl_disabled = ssl.any? { |x| x['Value'] == 'DISABLED' }
-    pending("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.") if ssl_disabled
-
-    # You may need to adjust the lines below to match your SSL certificate paths
-    ssl_client = nil
-    option_overrides = {
-      'host'     => 'mysql2gem.example.com', # must match the certificates
-      :sslkey    => '/etc/mysql/client-key.pem',
-      :sslcert   => '/etc/mysql/client-cert.pem',
-      :sslca     => '/etc/mysql/ca-cert.pem',
-      :sslcipher => 'DHE-RSA-AES256-SHA',
-      :sslverify => true,
-    }
-    %i[sslkey sslcert sslca].each do |item|
-      unless File.exist?(option_overrides[item])
-        pending("DON'T WORRY, THIS TEST PASSES - but #{option_overrides[item]} does not exist.")
-        break
+  context "SSL" do
+    before(:example) do
+      ssl = @client.query "SHOW VARIABLES LIKE 'have_ssl'"
+      ssl_uncompiled = ssl.any? { |x| x['Value'] == 'OFF' }
+      ssl_disabled = ssl.any? { |x| x['Value'] == 'DISABLED' }
+      if ssl_uncompiled
+        skip("DON'T WORRY, THIS TEST PASSES - but SSL is not compiled into your MySQL daemon.")
+      elsif ssl_disabled
+        skip("DON'T WORRY, THIS TEST PASSES - but SSL is not enabled in your MySQL daemon.")
+      else
+        %i[sslkey sslcert sslca].each do |item|
+          unless File.exist?(option_overrides[item])
+            skip("DON'T WORRY, THIS TEST PASSES - but #{option_overrides[item]} does not exist.")
+            break
+          end
+        end
       end
     end
-    expect do
-      ssl_client = new_client(option_overrides)
-    end.not_to raise_error
 
-    results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]
-    expect(results['Ssl_cipher']).not_to be_empty
-    expect(results['Ssl_version']).not_to be_empty
+    let(:option_overrides) do
+      {
+        'host'     => 'mysql2gem.example.com', # must match the certificates
+        :sslkey    => '/etc/mysql/client-key.pem',
+        :sslcert   => '/etc/mysql/client-cert.pem',
+        :sslca     => '/etc/mysql/ca-cert.pem',
+        :sslcipher => 'DHE-RSA-AES256-SHA',
+        :sslverify => true,
+      }
+    end
 
-    expect(ssl_client.ssl_cipher).not_to be_empty
-    expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
+    let(:ssl_client) do
+      new_client(option_overrides)
+    end
+
+    # 'preferred' or 'verify_ca' are only in MySQL 5.6.36+, 5.7.11+, 8.0+
+    version = Mysql2::Client.info
+    ssl_modes = case version
+    when 50636...50700, 50711...50800, 80000...90000
+      %i[disabled preferred required verifa_ca verify_identity]
+    else
+      %i[disabled required verify_identity]
+    end
+
+    # MySQL and MariaDB and all versions of Connector/C
+    ssl_modes.each do |ssl_mode|
+      it "should set ssl_mode option #{ssl_mode}" do
+        options = {
+          ssl_mode: ssl_mode,
+        }
+        options.merge!(option_overrides)
+        expect do
+          expect do
+            new_client(options)
+          end.not_to output(/does not support ssl_mode/).to_stderr
+        end.not_to raise_error
+      end
+    end
+
+    it "should be able to connect via SSL options" do
+      # You may need to adjust the lines below to match your SSL certificate paths
+      results = Hash[ssl_client.query('SHOW STATUS WHERE Variable_name LIKE "Ssl_%"').map { |x| x.values_at('Variable_name', 'Value') }]
+      expect(results['Ssl_cipher']).not_to be_empty
+      expect(results['Ssl_version']).not_to be_empty
+
+      expect(ssl_client.ssl_cipher).not_to be_empty
+      expect(results['Ssl_cipher']).to eql(ssl_client.ssl_cipher)
+    end
   end
 
   def run_gc
@@ -183,6 +223,7 @@ RSpec.describe Mysql2::Client do
       10.times do
         closed = @client.query("SHOW PROCESSLIST").none? { |row| row['Id'] == connection_id }
         break if closed
+
         sleep(0.1)
       end
       expect(closed).to eq(true)
@@ -407,7 +448,7 @@ RSpec.describe Mysql2::Client do
   end
 
   context ":local_infile" do
-    before(:all) do
+    before(:context) do
       new_client(local_infile: true) do |client|
         local = client.query "SHOW VARIABLES LIKE 'local_infile'"
         local_enabled = local.any? { |x| x['Value'] == 'ON' }
@@ -423,7 +464,7 @@ RSpec.describe Mysql2::Client do
       end
     end
 
-    after(:all) do
+    after(:context) do
       new_client do |client|
         client.query "DROP TABLE IF EXISTS infileTest"
       end
@@ -479,6 +520,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should set default program_name in connect_attrs" do
+    skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client
     if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
@@ -488,6 +530,7 @@ RSpec.describe Mysql2::Client do
   end
 
   it "should set custom connect_attrs" do
+    skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
     client = new_client(connect_attrs: { program_name: 'my_program_name', foo: 'fooval', bar: 'barval' })
     if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
@@ -573,7 +616,7 @@ RSpec.describe Mysql2::Client do
       end
       expect do
         @client.query("SELECT SLEEP(1)")
-      end.to raise_error(Mysql2::Error, /Lost connection to MySQL server/)
+      end.to raise_error(Mysql2::Error, /Lost connection/)
 
       if RUBY_PLATFORM !~ /mingw|mswin/
         expect do
@@ -591,10 +634,13 @@ RSpec.describe Mysql2::Client do
       end
 
       it "should describe the thread holding the active query" do
-        thr = Thread.new { @client.query("SELECT 1", async: true) }
+        thr = Thread.new do
+          @client.query("SELECT 1", async: true)
+          Fiber.current
+        end
 
-        thr.join
-        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(thr.inspect)))
+        fiber = thr.value
+        expect { @client.query('SELECT 1') }.to raise_error(Mysql2::Error, Regexp.new(Regexp.escape(fiber.inspect)))
       end
 
       it "should timeout if we wait longer than :read_timeout" do
@@ -629,7 +675,7 @@ RSpec.describe Mysql2::Client do
         end
 
         # the query ran uninterrupted
-        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.1).of(query_time)
+        expect(mark.fetch(:QUERY_END) - mark.fetch(:QUERY_START)).to be_within(0.2).of(query_time)
         # signals fired while the query was running
         expect(mark.fetch(:USR1)).to be_between(mark.fetch(:QUERY_START), mark.fetch(:QUERY_END))
       end
@@ -708,7 +754,7 @@ RSpec.describe Mysql2::Client do
 
         # This check demonstrates that the threads are sleeping concurrently:
         # In the serial case, the difference would be a multiple of sleep time
-        expect(stop - start).to be_within(0.1).of(sleep_time)
+        expect(stop - start).to be_within(0.2).of(sleep_time)
 
         expect(values).to match_array(threads.map(&:object_id))
       end
@@ -730,7 +776,7 @@ RSpec.describe Mysql2::Client do
     end
 
     context "Multiple results sets" do
-      before(:each) do
+      before(:example) do
         @multi_client = new_client(flags: Mysql2::Client::MULTI_STATEMENTS)
       end
 
@@ -974,12 +1020,12 @@ RSpec.describe Mysql2::Client do
   end
 
   context 'write operations api' do
-    before(:each) do
+    before(:example) do
       @client.query "USE test"
       @client.query "CREATE TABLE IF NOT EXISTS lastIdTest (`id` BIGINT NOT NULL AUTO_INCREMENT, blah INT(11), PRIMARY KEY (`id`))"
     end
 
-    after(:each) do
+    after(:example) do
       @client.query "DROP TABLE lastIdTest"
     end
 
@@ -1026,8 +1072,56 @@ RSpec.describe Mysql2::Client do
     expect(@client).to respond_to(:ping)
   end
 
+  context "session_track" do
+    before(:example) do
+      unless Mysql2::Client.const_defined?(:SESSION_TRACK)
+        skip('Server versions must be MySQL 5.7 later.')
+      end
+      @client.query("SET @@SESSION.session_track_system_variables='*';")
+    end
+
+    it "returns changes system variables for SESSION_TRACK_SYSTEM_VARIABLES" do
+      @client.query("SET @@SESSION.session_track_state_change=ON;")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
+      expect(res).to eq(%w[session_track_state_change ON])
+    end
+
+    it "returns database name for SESSION_TRACK_SCHEMA" do
+      @client.query("USE information_schema")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SCHEMA)
+      expect(res).to eq(["information_schema"])
+    end
+
+    it "returns multiple session track type values when available" do
+      @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS';")
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_SYSTEM_VARIABLES)
+      expect(res).to eq(%w[session_track_transaction_info CHARACTERISTICS])
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_STATE_CHANGE)
+      expect(res).to be_nil
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
+      expect(res).to eq([""])
+    end
+
+    it "returns valid transaction state inside a transaction" do
+      @client.query("SET @@SESSION.session_track_transaction_info='CHARACTERISTICS'")
+      @client.query("START TRANSACTION")
+
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_STATE)
+      expect(res).to eq(["T_______"])
+    end
+
+    it "returns empty array if session track type not found" do
+      @client.query("SET @@SESSION.session_track_state_change=ON;")
+      res = @client.session_track(Mysql2::Client::SESSION_TRACK_TRANSACTION_CHARACTERISTICS)
+      expect(res).to be_nil
+    end
+  end
+
   context "select_db" do
-    before(:each) do
+    before(:example) do
       2.times do |i|
         @client.query("CREATE DATABASE test_selectdb_#{i}")
         @client.query("USE test_selectdb_#{i}")
@@ -1035,7 +1129,7 @@ RSpec.describe Mysql2::Client do
       end
     end
 
-    after(:each) do
+    after(:example) do
       2.times do |i|
         @client.query("DROP DATABASE test_selectdb_#{i}")
       end

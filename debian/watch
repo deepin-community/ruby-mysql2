@@ -1,2 +1,2 @@
 version=4
-https://github.com/brianmario/mysql2/releases .*/([\d\.]+).tar.gz
+https://github.com/brianmario/mysql2/tags .*/v?(\d\S*)\.tar\.gz

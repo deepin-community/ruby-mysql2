@@ -1,0 +1,32 @@
+From: Lucas Nussbaum <lucas@debian.org>
+Date: Tue, 7 May 2024 14:27:45 +0200
+Subject: Ignore compaction bug on ruby3.1
+
+---
+ spec/spec_helper.rb | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/spec/spec_helper.rb b/spec/spec_helper.rb
+index edfac4d..11ecfa7 100644
+--- a/spec/spec_helper.rb
++++ b/spec/spec_helper.rb
+@@ -6,11 +6,19 @@ require 'fiber'
+ 
+ DatabaseCredentials = YAML.load_file('spec/configuration.yml')
+ 
++# On Ruby3.1 and ppc64el, GC Compaction is broken.
++# This is reported upstream as https://github.com/brianmario/mysql2/issues/1261
++# and https://bugs.ruby-lang.org/issues/18829
++# It is fixed in ruby3.2
++# Let's ignore this problem since Ruby3.1 is going away anyway
++require 'rbconfig'
++if not (RbConfig::CONFIG['host_cpu'] == 'powerpc64le' and RUBY_VERSION.split('.')[0..1].map(&:to_i) == [3,1])
+ if GC.respond_to?(:verify_compaction_references)
+   # This method was added in Ruby 3.0.0. Calling it this way asks the GC to
+   # move objects around, helping to find object movement bugs.
+   GC.verify_compaction_references(double_heap: true, toward: :empty)
+ end
++end
+ 
+ RSpec.configure do |config|
+   config.disable_monkey_patching!
