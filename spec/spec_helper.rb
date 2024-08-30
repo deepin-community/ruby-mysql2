@@ -2,7 +2,15 @@ require 'rspec'
 require 'mysql2'
 require 'timeout'
 require 'yaml'
+require 'fiber'
+
 DatabaseCredentials = YAML.load_file('spec/configuration.yml')
+
+if GC.respond_to?(:verify_compaction_references)
+  # This method was added in Ruby 3.0.0. Calling it this way asks the GC to
+  # move objects around, helping to find object movement bugs.
+  GC.verify_compaction_references(double_heap: true, toward: :empty)
+end
 
 RSpec.configure do |config|
   config.disable_monkey_patching!
@@ -26,6 +34,7 @@ RSpec.configure do |config|
     @clients ||= []
     @clients << client
     return client unless block_given?
+
     begin
       yield client
     ensure
@@ -36,7 +45,7 @@ RSpec.configure do |config|
 
   def num_classes
     # rubocop:disable Lint/UnifiedInteger
-    0.class == Integer ? [Integer] : [Fixnum, Bignum]
+    0.instance_of?(Integer) ? [Integer] : [Fixnum, Bignum]
     # rubocop:enable Lint/UnifiedInteger
   end
 
@@ -51,15 +60,24 @@ RSpec.configure do |config|
     end
   end
 
-  config.before :each do
-    @client = new_client
+  config.before(:suite) do
+    begin
+      new_client
+    rescue Mysql2::Error => e
+      username = DatabaseCredentials['root']['username']
+      database = DatabaseCredentials['root']['database']
+      message = %(
+An error occurred while connecting to the testing database server.
+Make sure that the database server is running.
+Make sure that `mysql -u #{username} [options] #{database}` succeeds by the root user config in spec/configuration.yml.
+Make sure that the testing database '#{database}' exists. If it does not exist, create it.
+)
+      warn message
+      raise e
+    end
   end
 
-  config.after :each do
-    @clients.each(&:close)
-  end
-
-  config.before(:all) do
+  config.before(:context) do
     new_client do |client|
       client.query %[
         CREATE TABLE IF NOT EXISTS mysql2_test (
@@ -119,5 +137,13 @@ RSpec.configure do |config|
         )
       ]
     end
+  end
+
+  config.before(:example) do
+    @client = new_client
+  end
+
+  config.after(:example) do
+    @clients.each(&:close)
   end
 end

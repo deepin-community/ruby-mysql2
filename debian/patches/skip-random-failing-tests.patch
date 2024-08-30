@@ -1,41 +1,41 @@
-Description: skip connect_attrs tests due random failure
-Author: Lucas Kanashiro <kanashiro@debian.org>
-Last-Update: 2019-01-04
+From: Lucas Kanashiro <kanashiro@debian.org>
+Date: Thu, 30 Nov 2023 07:21:08 -0500
+Subject: skip connect_attrs tests due random failure
 
+Last-Update: 2023-11-30
+---
+ spec/mysql2/client_spec.rb    | 4 ++--
+ spec/mysql2/result_spec.rb    | 2 +-
+ spec/mysql2/statement_spec.rb | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/spec/mysql2/client_spec.rb b/spec/mysql2/client_spec.rb
+index ead8329..a438518 100644
 --- a/spec/mysql2/client_spec.rb
 +++ b/spec/mysql2/client_spec.rb
-@@ -478,7 +478,7 @@
+@@ -519,7 +519,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
      expect(client.read_timeout).to be_nil
    end
  
 -  it "should set default program_name in connect_attrs" do
 +  xit "should set default program_name in connect_attrs" do
+     skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
      client = new_client
      if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
-       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
-@@ -487,7 +487,7 @@
+@@ -529,7 +529,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
      expect(result.first['attr_value']).to eq($PROGRAM_NAME)
    end
  
 -  it "should set custom connect_attrs" do
 +  xit "should set custom connect_attrs" do
+     skip("DON'T WORRY, THIS TEST PASSES - but PERFORMANCE SCHEMA is not enabled in your MySQL daemon.") unless performance_schema_enabled
      client = new_client(connect_attrs: { program_name: 'my_program_name', foo: 'fooval', bar: 'barval' })
      if Mysql2::Client::CONNECT_ATTRS.zero? || client.server_info[:version].match(/10.[01].\d+-MariaDB/)
-       pending('Both client and server versions must be MySQL 5.6 or MariaDB 10.2 or later.')
---- a/spec/mysql2/statement_spec.rb
-+++ b/spec/mysql2/statement_spec.rb
-@@ -696,7 +696,7 @@
-   end
- 
-   context 'close' do
--    it 'should free server resources' do
-+    xit 'should free server resources' do
-       stmt = @client.prepare 'SELECT 1'
-       GC.disable
-       expect { stmt.close }.to change(&method(:stmt_count)).by(-1)
+diff --git a/spec/mysql2/result_spec.rb b/spec/mysql2/result_spec.rb
+index ed3e9d2..d0aa385 100644
 --- a/spec/mysql2/result_spec.rb
 +++ b/spec/mysql2/result_spec.rb
-@@ -149,7 +149,7 @@
+@@ -237,7 +237,7 @@ RSpec.describe Mysql2::Result do
        expect(result.count).to eql(0)
      end
  
@@ -44,3 +44,16 @@ Last-Update: 2019-01-04
        @client.query "CREATE TEMPORARY TABLE streamingTest (val BINARY(255)) ENGINE=MEMORY"
  
        # Insert enough records to force the result set into multiple reads
+diff --git a/spec/mysql2/statement_spec.rb b/spec/mysql2/statement_spec.rb
+index 57e5908..5e99f32 100644
+--- a/spec/mysql2/statement_spec.rb
++++ b/spec/mysql2/statement_spec.rb
+@@ -708,7 +708,7 @@ RSpec.describe Mysql2::Statement do
+   end
+ 
+   context 'close' do
+-    it 'should free server resources' do
++    xit 'should free server resources' do
+       stmt = @client.prepare 'SELECT 1'
+       GC.disable
+       expect { stmt.close }.to change(&method(:stmt_count)).by(-1)

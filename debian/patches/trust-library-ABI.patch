@@ -1,14 +1,22 @@
-Description: Trust library ABI
- Instead of forcibly checking MySQL client library versions, let's trust the library ABI versioning to work.
+From: Antonio Terceiro <terceiro@debian.org>
+Date: Thu, 30 Nov 2023 07:21:08 -0500
+Subject: Trust library ABI
+
 Bug-Debian: https://bugs.debian.org/794477
 Forwarded: not-needed
-Author: Antonio Terceiro <terceiro@debian.org>
 Origin: vendor
-Last-Update: 2016-02-25
+Last-Update: 2023-11-30
+
+Instead of forcibly checking MySQL client library versions, let's trust the library ABI versioning to work.
 ---
+ ext/mysql2/client.c | 18 ------------------
+ 1 file changed, 18 deletions(-)
+
+diff --git a/ext/mysql2/client.c b/ext/mysql2/client.c
+index a49b3c3..b5efa37 100644
 --- a/ext/mysql2/client.c
 +++ b/ext/mysql2/client.c
-@@ -1382,24 +1382,6 @@
+@@ -1506,24 +1506,6 @@ static VALUE rb_mysql_client_prepare_statement(VALUE self, VALUE sql) {
  }
  
  void init_mysql2_client() {

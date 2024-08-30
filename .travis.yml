@@ -1,32 +1,11 @@
-sudo: required
 dist: trusty
-services: docker
 language: ruby
-bundler_args: --without benchmarks development
-# Pin Rubygems to a working version. Sometimes it breaks upstream. Update now and then.
+bundler_args: --without development
 before_install:
   - gem --version
-  - gem update --system --quiet || gem update --system 2.7.10 --quiet
   - gem update bundler
   - gem --version
-  - bash .travis_setup.sh
-addons:
-  hosts:
-    - mysql2gem.example.com
-  apt:
-    packages:
-    - mysql-server-5.6
-    - mysql-client-core-5.6
-    - mysql-client-5.6
-rvm:
-  - 2.6
-  - 2.5
-  - 2.4
-  - 2.3
-  - 2.2
-  - 2.1
-  - 2.0.0
-  - ruby-head
+  - bash ci/setup.sh
 matrix:
   include:
     - rvm: 2.4
@@ -58,32 +37,8 @@ matrix:
       addons:
         hosts:
           - mysql2gem.example.com
-    - rvm: 2.4
-      env: DB=mysql57
-      dist: xenial
-      addons:
-        hosts:
-          - mysql2gem.example.com
-    - rvm: 2.4
-      env: DB=mysql80
-      dist: xenial
-      addons:
-        hosts:
-          - mysql2gem.example.com
-    - os: osx
-      rvm: 2.4
-      env: DB=mysql56
-      addons:
-        hosts:
-          - mysql2gem.example.com
-    - rvm: 2.4
-      env: DOCKER=centos
-      before_install: true
-      install: docker build -t mysql2 -f .travis_Dockerfile_centos .
-      script: docker run --add-host=mysql2gem.example.com:127.0.0.1 -t mysql2
   fast_finish: true
   allow_failures:
-    - rvm: ruby-head
-    - os: osx
-      rvm: 2.4
-      env: DB=mysql56
+    # Allow failure due to a package repository not found for now.
+    # https://travis-ci.org/github/brianmario/mysql2/jobs/767276558#L1255
+    - env: DB=mysql55

@@ -1,13 +1,23 @@
-Description: skip problematic tests
- For some reason I cannot get these tests to pass on Debian. The first one will
- fail randomly, while the second one will always fail.
-Author: Antonio Terceiro <terceiro@debian.org>
+From: Antonio Terceiro <terceiro@debian.org>
+Date: Thu, 30 Nov 2023 07:21:08 -0500
+Subject: skip problematic tests
+
 Origin: vendor
 Forwarded: not-needed
-Last-Update: 2016-02-24
+Last-Update: 2023-11-30
+
+For some reason I cannot get these tests to pass on Debian. The first one will
+fail randomly, while the second one will always fail.
+---
+ spec/mysql2/client_spec.rb | 2 +-
+ spec/mysql2/error_spec.rb  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/spec/mysql2/client_spec.rb b/spec/mysql2/client_spec.rb
+index a438518..f7106a3 100644
 --- a/spec/mysql2/client_spec.rb
 +++ b/spec/mysql2/client_spec.rb
-@@ -654,7 +654,7 @@
+@@ -700,7 +700,7 @@ RSpec.describe Mysql2::Client do # rubocop:disable Metrics/BlockLength
  
          # expect the connection to not be broken
          expect { @client.query('SELECT 1') }.to_not raise_error
@@ -16,9 +26,11 @@ Last-Update: 2016-02-24
  
        context 'when a non-standard exception class is raised' do
          it "should close the connection when an exception is raised" do
+diff --git a/spec/mysql2/error_spec.rb b/spec/mysql2/error_spec.rb
+index efa3437..7b9430e 100644
 --- a/spec/mysql2/error_spec.rb
 +++ b/spec/mysql2/error_spec.rb
-@@ -74,5 +74,5 @@
+@@ -86,5 +86,5 @@ RSpec.describe Mysql2::Error do
          expect(bad_err.message).to be_valid_encoding
        end
      end

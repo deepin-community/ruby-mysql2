@@ -1,14 +1,21 @@
-Description: Remove rpath from compilation flags
- This patch is required to pass the binary-or-shlib-defines-rpath lintian
- test. To fix this problem, any attempt to add rpath to $LDFLAGS
- inside of ext/mysql2/extconf.rb is patched out
-Author: Michael Franzl <office@michaelfranzl.com>
-Last-Update: 2013-11-26
+From: Michael Franzl <office@michaelfranzl.com>
+Date: Thu, 30 Nov 2023 07:21:08 -0500
+Subject: Remove rpath from compilation flags
 
+Last-Update: 2023-11-30
 
+This patch is required to pass the binary-or-shlib-defines-rpath lintian
+test. To fix this problem, any attempt to add rpath to $LDFLAGS
+inside of ext/mysql2/extconf.rb is patched out
+---
+ ext/mysql2/extconf.rb | 29 -----------------------------
+ 1 file changed, 29 deletions(-)
+
+diff --git a/ext/mysql2/extconf.rb b/ext/mysql2/extconf.rb
+index 7a07639..8b37e88 100644
 --- a/ext/mysql2/extconf.rb
 +++ b/ext/mysql2/extconf.rb
-@@ -230,35 +230,6 @@
+@@ -282,35 +282,6 @@ if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
      # Let's do it!
      Rake::Task[vendordll].invoke
    end

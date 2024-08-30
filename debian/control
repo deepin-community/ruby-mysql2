@@ -11,7 +11,7 @@ Build-Depends: debhelper-compat (= 13),
                gem2deb,
                rake,
                ruby-rspec
-Standards-Version: 4.5.0
+Standards-Version: 4.6.2
 Vcs-Git: https://salsa.debian.org/ruby-team/ruby-mysql2.git
 Vcs-Browser: https://salsa.debian.org/ruby-team/ruby-mysql2
 Homepage: https://github.com/brianmario/mysql2
@@ -24,6 +24,7 @@ XB-Ruby-Versions: ${ruby:Versions}
 Depends: ruby-eventmachine,
          ${misc:Depends},
          ${shlibs:Depends}
+Multi-Arch: same
 Description: simple, fast MySQL library for Ruby
  This is an API module that allows Ruby programs to interface with MySQL
  databases. Usually, it will be pulled in automatically by packages providing

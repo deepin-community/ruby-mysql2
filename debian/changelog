@@ -1,8 +1,41 @@
-ruby-mysql2 (0.5.3-3.1) UNRELEASED; urgency=medium
+ruby-mysql2 (0.5.5-3) unstable; urgency=medium
 
-  * update
+  * Rework patch 0008-Ignore-NotImplementedError-on-GC-compaction.patch
+    into 0008-Ignore-compaction-bug-on-ruby3.1.patch
+    to work around Compaction bug in ruby3.1. Closes: #1071002
 
- -- Debian Ruby Team <pkg-ruby-extras-maintainers@lists.alioth.debian.org>  Wed, 20 Jul 2022 16:44:35 +0800
+ -- Lucas Nussbaum <lucas@debian.org>  Tue, 14 May 2024 22:16:29 +0200
+
+ruby-mysql2 (0.5.5-2) unstable; urgency=medium
+
+  * Ignore NotImplementedError on GC compaction to fix FTBFS on ppc64el
+
+ -- Lucas Nussbaum <lucas@debian.org>  Tue, 07 May 2024 15:00:12 +0200
+
+ruby-mysql2 (0.5.5-1) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Debian Janitor ]
+  * Apply multi-arch hints. + ruby-mysql2: Add Multi-Arch: same.
+
+  [ Aquila Macedo ]
+  * New upstream version 0.5.5
+  * d/watch: fix up the regex for uscan.
+  * d/control: bump Standards-Version to 4.6.2; no changes needed.
+  * d/patches:
+    - Remove outdated patches.
+    - Refresh patches.
+
+ -- Aquila Macedo Costa <aquilamacedo@riseup.net>  Thu, 30 Nov 2023 08:11:54 -0500
+
+ruby-mysql2 (0.5.3-4) unstable; urgency=medium
+
+  * Team upload.
+  * Add patch to add support for ruby 3.1
+  * Declare compliance with Debian Policy 4.6.1
+
+ -- Lucas Kanashiro <kanashiro@debian.org>  Mon, 24 Oct 2022 09:08:30 -0300
 
 ruby-mysql2 (0.5.3-3.1) unstable; urgency=medium
 

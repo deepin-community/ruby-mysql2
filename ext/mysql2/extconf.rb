@@ -1,6 +1,8 @@
 require 'mkmf'
 require 'English'
 
+### Some helper functions
+
 def asplode(lib)
   if RUBY_PLATFORM =~ /mingw|mswin/
     abort "-----\n#{lib} is missing. Check your installation of MySQL or Connector/C, and try again.\n-----"
@@ -15,18 +17,56 @@ def add_ssl_defines(header)
   all_modes_found = %w[SSL_MODE_DISABLED SSL_MODE_PREFERRED SSL_MODE_REQUIRED SSL_MODE_VERIFY_CA SSL_MODE_VERIFY_IDENTITY].inject(true) do |m, ssl_mode|
     m && have_const(ssl_mode, header)
   end
-  $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT' if all_modes_found
-  # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
-  has_no_support = all_modes_found ? false : !have_const('MYSQL_OPT_SSL_ENFORCE', header)
-  $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if has_no_support
+  if all_modes_found
+    $CFLAGS << ' -DFULL_SSL_MODE_SUPPORT'
+  else
+    # if we only have ssl toggle (--ssl,--disable-ssl) from 5.7.3 to 5.7.10
+    # and the verify server cert option. This is also the case for MariaDB.
+    has_verify_support  = have_const('MYSQL_OPT_SSL_VERIFY_SERVER_CERT', header)
+    has_enforce_support = have_const('MYSQL_OPT_SSL_ENFORCE', header)
+    $CFLAGS << ' -DNO_SSL_MODE_SUPPORT' if !has_verify_support && !has_enforce_support
+  end
 end
+
+### Check for Ruby C extention interfaces
 
 # 2.1+
 have_func('rb_absint_size')
 have_func('rb_absint_singlebit_p')
 
+# 2.7+
+have_func('rb_gc_mark_movable')
+
 # Missing in RBX (https://github.com/rubinius/rubinius/issues/3771)
 have_func('rb_wait_for_single_fd')
+
+# 3.0+
+have_func('rb_enc_interned_str', 'ruby.h')
+
+### Find OpenSSL library
+
+# User-specified OpenSSL if explicitly specified
+if with_config('openssl-dir')
+  _, lib = dir_config('openssl')
+  if lib
+    # Ruby versions below 2.0 on Unix and below 2.1 on Windows
+    # do not properly search for lib directories, and must be corrected:
+    # https://bugs.ruby-lang.org/projects/ruby-trunk/repository/revisions/39717
+    unless lib && lib[-3, 3] == 'lib'
+      @libdir_basename = 'lib'
+      _, lib = dir_config('openssl')
+    end
+    abort "-----\nCannot find library dir(s) #{lib}\n-----" unless lib && lib.split(File::PATH_SEPARATOR).any? { |dir| File.directory?(dir) }
+    warn "-----\nUsing --with-openssl-dir=#{File.dirname lib}\n-----"
+    $LDFLAGS << " -L#{lib}"
+  end
+# Homebrew OpenSSL on MacOS
+elsif RUBY_PLATFORM =~ /darwin/ && system('command -v brew')
+  openssl_location = `brew --prefix openssl`.strip
+  $LDFLAGS << " -L#{openssl_location}/lib" if openssl_location
+end
+
+### Find MySQL client library
 
 # borrowed from mysqlplus
 # http://github.com/oldmoe/mysqlplus/blob/master/ext/extconf.rb
@@ -35,6 +75,7 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /opt/local
   /opt/local/mysql
   /opt/local/lib/mysql5*
+  /opt/homebrew/opt/mysql*
   /usr
   /usr/mysql
   /usr/local
@@ -42,6 +83,9 @@ dirs = ENV.fetch('PATH').split(File::PATH_SEPARATOR) + %w[
   /usr/local/mysql-*
   /usr/local/lib/mysql5*
   /usr/local/opt/mysql5*
+  /usr/local/opt/mysql@*
+  /usr/local/opt/mysql-client
+  /usr/local/opt/mysql-client@*
 ].map { |dir| dir << '/bin' }
 
 # For those without HOMEBREW_ROOT in PATH
@@ -108,6 +152,7 @@ have_struct_member('MYSQL', 'net.vio', mysql_h)
 have_struct_member('MYSQL', 'net.pvio', mysql_h)
 
 # These constants are actually enums, so they cannot be detected by #ifdef in C code.
+have_const('MYSQL_DEFAULT_AUTH', mysql_h)
 have_const('MYSQL_ENABLE_CLEARTEXT_PLUGIN', mysql_h)
 have_const('SERVER_QUERY_NO_GOOD_INDEX_USED', mysql_h)
 have_const('SERVER_QUERY_NO_INDEX_USED', mysql_h)
@@ -119,10 +164,13 @@ have_const('MYSQL_OPTION_MULTI_STATEMENTS_OFF', mysql_h)
 # to retain compatibility with the typedef in earlier MySQLs.
 have_type('my_bool', mysql_h)
 
+### Compiler flags to help catch errors
+
 # This is our wishlist. We use whichever flags work on the host.
 # -Wall and -Wextra are included by default.
 wishlist = [
   '-Weverything',
+  '-Wno-compound-token-split-by-macro', # Fixed in Ruby 2.7+ at https://bugs.ruby-lang.org/issues/17865
   '-Wno-bad-function-cast', # rb_thread_call_without_gvl returns void * that we cast to VALUE
   '-Wno-conditional-uninitialized', # false positive in client.c
   '-Wno-covered-switch-default', # result.c -- enum_field_types (when fully covered, e.g. mysql 5.5)
@@ -147,8 +195,10 @@ end
 
 $CFLAGS << ' ' << usable_flags.join(' ')
 
+### Sanitizers to help with debugging -- many are available on both Clang/LLVM and GCC
+
 enabled_sanitizers = disabled_sanitizers = []
-# Specify a commna-separated list of sanitizers, or try them all by default
+# Specify a comma-separated list of sanitizers, or try them all by default
 sanitizers = with_config('sanitize')
 case sanitizers
 when true
@@ -164,7 +214,7 @@ when String
   end
 end
 
-unless disabled_sanitizers.empty?
+unless disabled_sanitizers.empty? # rubocop:disable Style/IfUnlessModifier
   abort "-----\nCould not enable requested sanitizers: #{disabled_sanitizers.join(',')}\n-----"
 end
 
@@ -180,6 +230,8 @@ unless enabled_sanitizers.empty?
   # Options for line numbers in backtraces
   $CFLAGS << ' -g -fno-omit-frame-pointer'
 end
+
+### Find MySQL Client on Windows, set RPATH to find the library at runtime
 
 if RUBY_PLATFORM =~ /mswin|mingw/ && !defined?(RubyInstaller)
   # Build libmysql.a interface link library
